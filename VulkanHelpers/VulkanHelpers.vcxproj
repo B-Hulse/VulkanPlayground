@@ -125,7 +125,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <AdditionalIncludeDirectories>C:\Source\Libs\;C:\Source\Libs\glfw-3.4.bin.WIN64\include;C:\VulkanSDK\1.3.261.1\Include;..\</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp20</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -168,8 +168,8 @@
     <ClInclude Include="GlfwInstance.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="PhysicalDeviceHelpers.h" />
+    <ClInclude Include="ShaderHelpers.h" />
     <ClInclude Include="ValidationLayerHelpers.h" />
-    <ClInclude Include="VulkanTest.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="DebugMessengerCallback.cpp" />
@@ -182,8 +182,8 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="PhysicalDeviceHelpers.cpp" />
+    <ClCompile Include="ShaderHelpers.cpp" />
     <ClCompile Include="ValidationLayerHelpers.cpp" />
-    <ClCompile Include="VulkanTest.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

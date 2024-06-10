@@ -36,6 +36,7 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
+    void createGraphicsPipeline();
     void mainLoop();
     void cleanup();
 
@@ -59,4 +60,5 @@ private:
     vk::Extent2D m_swapChainExtent;
     std::vector<vk::Image> m_swapChainImages;
     std::vector<vk::ImageView> m_swapChainImageViews;
+    vk::PipelineLayout m_pipelineLayout;
 };
