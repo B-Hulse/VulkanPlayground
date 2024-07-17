@@ -164,7 +164,12 @@ void BasicTriangleApplication::initVulcan()
     createLogicalDevice();
     createSwapChain();
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
+    createFrameBuffers();
+    createCommandPool();
+    createCommandBuffer();
+    createSyncObjects();
 }
 
 void BasicTriangleApplication::createInstance()
@@ -229,12 +234,12 @@ void BasicTriangleApplication::setupDebugMessenger()
 void BasicTriangleApplication::createSurface()
 {
     if (auto const result = static_cast<vk::Result>(glfwCreateWindowSurface(
-            m_instance,
-            m_window,
-            nullptr,
-            reinterpret_cast<VkSurfaceKHR*>(&m_surface)
-        ));
-        result != vk::Result::eSuccess)
+        m_instance,
+        m_window,
+        nullptr,
+        reinterpret_cast<VkSurfaceKHR*>(&m_surface)
+    ));
+    result != vk::Result::eSuccess)
     {
         throw std::runtime_error("Filed to create window surface, error = '" + to_string(result) + "'");
     }
@@ -261,7 +266,7 @@ void BasicTriangleApplication::createLogicalDevice()
         *queueFamilyIndices.presentFamilyIndex
     };
 
-    std::vector queuePriority = {1.0f};
+    std::vector queuePriority = { 1.0f };
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos(uniqueQueueFamilyIndices.size());
 
@@ -318,7 +323,7 @@ void BasicTriangleApplication::createSwapChain()
 
     auto const indices = m_physicalDevice.GetQueueFamilyIndices(m_surface);
 
-    std::set queueFamilyIndicesSet = {*indices.graphicsFamilyIndex, *indices.presentFamilyIndex};
+    std::set queueFamilyIndicesSet = { *indices.graphicsFamilyIndex, *indices.presentFamilyIndex };
     std::vector queueFamilyIndices(queueFamilyIndicesSet.begin(), queueFamilyIndicesSet.end());
 
     bool const concurrent = queueFamilyIndices.size() > 1;
@@ -350,24 +355,24 @@ void BasicTriangleApplication::createSwapChain()
 void BasicTriangleApplication::createImageViews()
 {
     auto fnGetImageView = [this](vk::Image const& img)
-    {
-        vk::ImageViewCreateInfo const imageViewCreateInfo(
-            {},
-            img,
-            vk::ImageViewType::e2D,
-            m_swapChainImageFormat,
-            vk::ComponentMapping(),
-            vk::ImageSubresourceRange(
-                vk::ImageAspectFlagBits::eColor,
-                0,
-                1,
-                0,
-                1
-            )
-        );
+        {
+            vk::ImageViewCreateInfo const imageViewCreateInfo(
+                {},
+                img,
+                vk::ImageViewType::e2D,
+                m_swapChainImageFormat,
+                vk::ComponentMapping(),
+                vk::ImageSubresourceRange(
+                    vk::ImageAspectFlagBits::eColor,
+                    0,
+                    1,
+                    0,
+                    1
+                )
+            );
 
-        return m_logicalDevice.createImageView(imageViewCreateInfo);
-    };
+            return m_logicalDevice.createImageView(imageViewCreateInfo);
+        };
 
     std::ranges::transform(m_swapChainImages, std::back_inserter(m_swapChainImageViews), fnGetImageView);
 }
@@ -377,24 +382,11 @@ void BasicTriangleApplication::createGraphicsPipeline()
     auto const vertShaderModule = CreateShaderModule(m_logicalDevice, "shaders/shader.vert.spv");
     auto const fragShaderModule = CreateShaderModule(m_logicalDevice, "shaders/shader.frag.spv");
 
-    vk::PipelineShaderStageCreateInfo vertShaderStageCreate(
-        {},
-        vk::ShaderStageFlagBits::eVertex,
-        vertShaderModule,
-        "main"
-    );
-    vk::PipelineShaderStageCreateInfo fragShaderStageCreate(
-        {},
-        vk::ShaderStageFlagBits::eFragment,
-        fragShaderModule,
-        "main"
-    );
-
-    vk::PipelineVertexInputStateCreateInfo const vertexInputCreate{};
+    constexpr vk::PipelineVertexInputStateCreateInfo vertexInputState{};
 
     std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = {
-        {{}, vk::ShaderStageFlagBits::eVertex, vertShaderModule, "main"},
-        {{}, vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main"}
+        { {}, vk::ShaderStageFlagBits::eVertex, vertShaderModule, "main" },
+        { {}, vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main" }
     };
 
     std::vector dynamicStates = {
@@ -402,17 +394,17 @@ void BasicTriangleApplication::createGraphicsPipeline()
         vk::DynamicState::eScissor
     };
 
-    vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo{{}, dynamicStates};
+    vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo{ {}, dynamicStates };
 
-    vk::PipelineInputAssemblyStateCreateInfo const inputAssemblyCreateInfo{
+    constexpr vk::PipelineInputAssemblyStateCreateInfo inputAssemblyState{
         {},
         vk::PrimitiveTopology::eTriangleList,
         false
     };
 
-    vk::PipelineViewportStateCreateInfo const viewportStateCreateInfo{{}, 1, nullptr, 1, nullptr};
+    constexpr vk::PipelineViewportStateCreateInfo viewportState{ {}, 1, nullptr, 1, nullptr };
 
-    vk::PipelineRasterizationStateCreateInfo const rasterizationStateCreateInfo{
+    constexpr vk::PipelineRasterizationStateCreateInfo rasterizationState{
         {},
         false,
         false,
@@ -426,11 +418,218 @@ void BasicTriangleApplication::createGraphicsPipeline()
         1.0f
     };
 
-    vk::PipelineMultisampleStateCreateInfo const multisampleStateCreateInfo{ {}, vk::SampleCountFlagBits::e1, false };
-    
+    constexpr vk::PipelineMultisampleStateCreateInfo multisampleState{};
+
+    std::vector colorBlendAttachments = {
+        vk::PipelineColorBlendAttachmentState {
+            false,
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            vk::FlagTraits<vk::ColorComponentFlagBits>::allFlags
+        }
+    };
+
+    vk::PipelineColorBlendStateCreateInfo const colorBlendState{
+        {},
+        false,
+        vk::LogicOp::eCopy,
+        colorBlendAttachments
+    };
+
+    m_pipelineLayout = m_logicalDevice.createPipelineLayout({});
+
+    vk::GraphicsPipelineCreateInfo const pipelineCreateInfo{
+        {},
+        shaderStages,
+        &vertexInputState,
+        &inputAssemblyState,
+        {},
+        &viewportState,
+        &rasterizationState,
+        &multisampleState,
+        {},
+        &colorBlendState,
+        &dynamicStateCreateInfo,
+        m_pipelineLayout,
+        m_renderPass,
+        0
+    };
+
+    auto pipelineResult = m_logicalDevice.createGraphicsPipeline(nullptr, pipelineCreateInfo);
+
+    resultCheck(pipelineResult.result, "Failed to create pipeline!");
+
+    m_pipeline = pipelineResult.value;
 
     m_logicalDevice.destroyShaderModule(vertShaderModule);
     m_logicalDevice.destroyShaderModule(fragShaderModule);
+}
+
+void BasicTriangleApplication::createRenderPass()
+{
+    std::vector colorAttachments = {
+        vk::AttachmentDescription {
+            {},
+            m_swapChainImageFormat,
+            vk::SampleCountFlagBits::e1,
+            vk::AttachmentLoadOp::eClear,
+            vk::AttachmentStoreOp::eStore,
+            vk::AttachmentLoadOp::eDontCare,
+            vk::AttachmentStoreOp::eDontCare,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::ePresentSrcKHR
+        }
+    };
+
+    std::vector colorAttachmentRefs = {
+        vk::AttachmentReference  {
+            0,
+            vk::ImageLayout::eColorAttachmentOptimal
+        }
+    };
+
+    std::vector subpasses = {
+        vk::SubpassDescription {
+            {},
+            vk::PipelineBindPoint::eGraphics,
+            {},
+            colorAttachmentRefs,
+            {}
+        }
+    };
+
+    std::vector dependencies{
+        vk::SubpassDependency {
+            vk::SubpassExternal,
+            0,
+            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits::eColorAttachmentOutput,
+            {},
+            vk::AccessFlagBits::eColorAttachmentWrite
+        }
+    };
+
+    m_renderPass = m_logicalDevice.createRenderPass({ {}, colorAttachments, subpasses, dependencies });
+}
+
+void BasicTriangleApplication::createFrameBuffers()
+{
+    m_swapChainFrameBuffers.clear();
+    m_swapChainFrameBuffers.reserve(m_swapChainImageViews.size());
+
+    for (auto const& imageView : m_swapChainImageViews)
+    {
+        std::vector attachments = { imageView };
+
+        vk::FramebufferCreateInfo frameBufferInfo = {
+            {},
+            m_renderPass,
+            attachments,
+            m_swapChainExtent.width,
+            m_swapChainExtent.height,
+            1
+        };
+
+        m_swapChainFrameBuffers.push_back(m_logicalDevice.createFramebuffer(frameBufferInfo));
+    }
+}
+
+void BasicTriangleApplication::createCommandPool()
+{
+    auto queueFamilyIndices = m_physicalDevice.GetQueueFamilyIndices(m_surface);
+
+    if (!queueFamilyIndices.graphicsFamilyIndex)
+    {
+        throw std::runtime_error("Graphics Family Index is always expected");
+    }
+
+    vk::CommandPoolCreateInfo poolInfo{
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        queueFamilyIndices.graphicsFamilyIndex.value()
+    };
+
+    m_commandPool = m_logicalDevice.createCommandPool(poolInfo);
+}
+
+void BasicTriangleApplication::createCommandBuffer()
+{
+    vk::CommandBufferAllocateInfo bufferAllocInfo{
+        m_commandPool,
+        vk::CommandBufferLevel::ePrimary,
+        1
+    };
+
+    auto buffers = m_logicalDevice.allocateCommandBuffers(bufferAllocInfo);
+
+    if (buffers.size() != 1)
+    {
+        throw std::runtime_error("Expected a single buffer");
+    }
+
+    m_commandBuffer = buffers.front();
+}
+
+void BasicTriangleApplication::createSyncObjects()
+{
+    m_imageAvailable = m_logicalDevice.createSemaphore({});
+    m_renderFinished = m_logicalDevice.createSemaphore({});
+    m_inFlight = m_logicalDevice.createFence({ vk::FenceCreateFlagBits::eSignaled });
+}
+
+void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex /*TODO: Potential refactor */)
+{
+    vk::CommandBufferBeginInfo beginInfo{};
+
+    buffer.begin(beginInfo);
+
+    std::vector clearColors = {
+        vk::ClearValue {
+            std::array {0.0f,0.0f,0.0f,1.0f}
+        }
+    };
+
+    vk::RenderPassBeginInfo renderPassInfo{
+        m_renderPass,
+        m_swapChainFrameBuffers[imageIndex],
+        vk::Rect2D {{0,0}, m_swapChainExtent},
+        clearColors
+    };
+
+    m_commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+    m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline);
+
+    std::vector viewports = {
+        vk::Viewport {
+            0.0f,
+            0.0f,
+            static_cast<float>(m_swapChainExtent.width),
+            static_cast<float>(m_swapChainExtent.height),
+            0.0f,
+            0.0f
+        }
+    };
+
+    m_commandBuffer.setViewport(0, viewports);
+
+    std::vector scissors = {
+        vk::Rect2D {
+            {0, 0},
+            m_swapChainExtent
+        }
+    };
+
+    m_commandBuffer.setScissor(0, scissors);
+
+    m_commandBuffer.draw(3, 1, 0, 0);
+
+    m_commandBuffer.endRenderPass();
+
+    m_commandBuffer.end();
 }
 
 void BasicTriangleApplication::mainLoop()
@@ -438,11 +637,72 @@ void BasicTriangleApplication::mainLoop()
     while (!glfwWindowShouldClose(m_window))
     {
         glfwPollEvents();
+        drawFrame();
     }
+
+    m_logicalDevice.waitIdle();
+}
+
+void BasicTriangleApplication::drawFrame()
+{
+    const std::vector inFlightFences = { m_inFlight };
+
+    std::ignore = m_logicalDevice.waitForFences(inFlightFences, vk::True, UINT64_MAX);
+
+    m_logicalDevice.resetFences(inFlightFences);
+
+    auto imageIndex = m_logicalDevice.acquireNextImageKHR(m_swapChain, UINT64_MAX, m_imageAvailable);
+
+    m_commandBuffer.reset();
+
+    recordCommandBuffer(m_commandBuffer, imageIndex.value);
+
+    std::vector waitSemaphores = { m_imageAvailable };
+    std::vector<vk::PipelineStageFlags> waitDstStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+    std::vector commandBuffers = { m_commandBuffer };
+    std::vector signalSemaphores = { m_renderFinished };
+
+    std::vector submitInfos{
+        vk::SubmitInfo {
+            waitSemaphores,
+            waitDstStages,
+            commandBuffers,
+            signalSemaphores
+        }
+    };
+
+    m_gfxQueue.submit(submitInfos, m_inFlight);
+
+    std::vector swapchains = { m_swapChain };
+    std::vector imageIndices = { imageIndex.value };
+
+    vk::PresentInfoKHR presentInfo {
+        signalSemaphores,
+        swapchains,
+        imageIndices
+    };
+
+    std::ignore = m_presentQueue.presentKHR(presentInfo);
 }
 
 void BasicTriangleApplication::cleanup()
 {
+    m_logicalDevice.destroySemaphore(m_imageAvailable);
+    m_logicalDevice.destroySemaphore(m_renderFinished);
+    m_logicalDevice.destroyFence(m_inFlight);
+
+    m_logicalDevice.destroyCommandPool(m_commandPool);
+
+    for (auto frameBuffer : m_swapChainFrameBuffers)
+    {
+        m_logicalDevice.destroyFramebuffer(frameBuffer);
+    }
+
+    m_logicalDevice.destroyPipeline(m_pipeline);
+
+    m_logicalDevice.destroyPipelineLayout(m_pipelineLayout);
+    m_logicalDevice.destroyRenderPass(m_renderPass);
+
     for (auto const& imageView : m_swapChainImageViews)
     {
         m_logicalDevice.destroyImageView(imageView);
@@ -474,7 +734,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL BasicTriangleApplication::debugCallback(
     void* pUserData
 )
 {
-    std::cout << "Validation Layer: " << pCallbackData->pMessage << std::endl;
+    std::cout << "Validation Layer: " << pCallbackData->pMessage << '\n';
 
     return VK_FALSE;
 }

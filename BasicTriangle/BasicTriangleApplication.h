@@ -37,7 +37,14 @@ private:
     void createSwapChain();
     void createImageViews();
     void createGraphicsPipeline();
+    void createRenderPass();
+    void createFrameBuffers();
+    void createCommandPool();
+    void createCommandBuffer();
+    void createSyncObjects();
+    void recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex);
     void mainLoop();
+    void drawFrame();
     void cleanup();
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
@@ -60,5 +67,14 @@ private:
     vk::Extent2D m_swapChainExtent;
     std::vector<vk::Image> m_swapChainImages;
     std::vector<vk::ImageView> m_swapChainImageViews;
+    std::vector<vk::Framebuffer> m_swapChainFrameBuffers;
+    vk::RenderPass m_renderPass;
     vk::PipelineLayout m_pipelineLayout;
+    vk::Pipeline m_pipeline;
+    vk::CommandPool m_commandPool;
+    vk::CommandBuffer m_commandBuffer;
+
+    vk::Semaphore m_imageAvailable;
+    vk::Semaphore m_renderFinished;
+    vk::Fence m_inFlight;
 };
