@@ -5,7 +5,7 @@
 
 int main()
 {
-    BasicTriangleApplication app;
+    BasicTriangleApplication app(2);
 
     try
     {

@@ -560,24 +560,20 @@ void BasicTriangleApplication::createCommandBuffer()
     vk::CommandBufferAllocateInfo bufferAllocInfo{
         m_commandPool,
         vk::CommandBufferLevel::ePrimary,
-        1
+        static_cast<uint32_t>(m_maxFramesInFlight)
     };
 
-    auto buffers = m_logicalDevice.allocateCommandBuffers(bufferAllocInfo);
-
-    if (buffers.size() != 1)
-    {
-        throw std::runtime_error("Expected a single buffer");
-    }
-
-    m_commandBuffer = buffers.front();
+    m_commandBuffer = m_logicalDevice.allocateCommandBuffers(bufferAllocInfo);
 }
 
 void BasicTriangleApplication::createSyncObjects()
 {
-    m_imageAvailable = m_logicalDevice.createSemaphore({});
-    m_renderFinished = m_logicalDevice.createSemaphore({});
-    m_inFlight = m_logicalDevice.createFence({ vk::FenceCreateFlagBits::eSignaled });
+    for (size_t i = 0; i <= m_maxFramesInFlight; i++)
+    {
+        m_imageAvailable.push_back(m_logicalDevice.createSemaphore({}));
+        m_renderFinished.push_back(m_logicalDevice.createSemaphore({}));
+        m_inFlight.push_back(m_logicalDevice.createFence({ vk::FenceCreateFlagBits::eSignaled }));
+    }
 }
 
 void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex /*TODO: Potential refactor */)
@@ -599,9 +595,9 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
         clearColors
     };
 
-    m_commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    buffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-    m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline);
+    buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline);
 
     std::vector viewports = {
         vk::Viewport {
@@ -614,7 +610,7 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
         }
     };
 
-    m_commandBuffer.setViewport(0, viewports);
+    buffer.setViewport(0, viewports);
 
     std::vector scissors = {
         vk::Rect2D {
@@ -623,13 +619,13 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
         }
     };
 
-    m_commandBuffer.setScissor(0, scissors);
+    buffer.setScissor(0, scissors);
 
-    m_commandBuffer.draw(3, 1, 0, 0);
+    buffer.draw(3, 1, 0, 0);
 
-    m_commandBuffer.endRenderPass();
+    buffer.endRenderPass();
 
-    m_commandBuffer.end();
+    buffer.end();
 }
 
 void BasicTriangleApplication::mainLoop()
@@ -645,22 +641,27 @@ void BasicTriangleApplication::mainLoop()
 
 void BasicTriangleApplication::drawFrame()
 {
-    const std::vector inFlightFences = { m_inFlight };
+    auto& currentCommandBuffer = m_commandBuffer[m_currentFrame];
+    auto& currentImageAvailable = m_imageAvailable[m_currentFrame];
+    auto& currentRenderFinished = m_renderFinished[m_currentFrame];
+    auto& currentInFlight = m_inFlight[m_currentFrame];
+
+    const std::vector inFlightFences = { currentInFlight };
 
     std::ignore = m_logicalDevice.waitForFences(inFlightFences, vk::True, UINT64_MAX);
 
     m_logicalDevice.resetFences(inFlightFences);
 
-    auto imageIndex = m_logicalDevice.acquireNextImageKHR(m_swapChain, UINT64_MAX, m_imageAvailable);
+    auto imageIndex = m_logicalDevice.acquireNextImageKHR(m_swapChain, UINT64_MAX, currentImageAvailable);
 
-    m_commandBuffer.reset();
+    currentCommandBuffer.reset();
 
-    recordCommandBuffer(m_commandBuffer, imageIndex.value);
+    recordCommandBuffer(currentCommandBuffer, imageIndex.value);
 
-    std::vector waitSemaphores = { m_imageAvailable };
+    std::vector waitSemaphores = { currentImageAvailable};
     std::vector<vk::PipelineStageFlags> waitDstStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-    std::vector commandBuffers = { m_commandBuffer };
-    std::vector signalSemaphores = { m_renderFinished };
+    std::vector commandBuffers = { currentCommandBuffer};
+    std::vector signalSemaphores = { currentRenderFinished};
 
     std::vector submitInfos{
         vk::SubmitInfo {
@@ -671,7 +672,7 @@ void BasicTriangleApplication::drawFrame()
         }
     };
 
-    m_gfxQueue.submit(submitInfos, m_inFlight);
+    m_gfxQueue.submit(submitInfos, currentInFlight);
 
     std::vector swapchains = { m_swapChain };
     std::vector imageIndices = { imageIndex.value };
@@ -683,13 +684,24 @@ void BasicTriangleApplication::drawFrame()
     };
 
     std::ignore = m_presentQueue.presentKHR(presentInfo);
+
+    m_currentFrame = (m_currentFrame + 1) % m_maxFramesInFlight;
 }
 
 void BasicTriangleApplication::cleanup()
 {
-    m_logicalDevice.destroySemaphore(m_imageAvailable);
-    m_logicalDevice.destroySemaphore(m_renderFinished);
-    m_logicalDevice.destroyFence(m_inFlight);
+    for (auto const& sem : m_imageAvailable)
+    {
+        m_logicalDevice.destroySemaphore(sem);
+    }
+    for (auto const& sem : m_renderFinished)
+    {
+        m_logicalDevice.destroySemaphore(sem);
+    }
+    for (auto const& fence : m_inFlight)
+    {
+        m_logicalDevice.destroyFence(fence);
+    }
 
     m_logicalDevice.destroyCommandPool(m_commandPool);
 

@@ -21,8 +21,8 @@ constexpr bool EnableValidationLayers = true;
 class BasicTriangleApplication
 {
 public:
-    BasicTriangleApplication()
-        : m_window(nullptr)
+    BasicTriangleApplication(size_t maxFramesInFlight)
+        : m_window(nullptr), m_maxFramesInFlight(maxFramesInFlight), m_currentFrame(0)
     {
     }
     void run();
@@ -55,6 +55,10 @@ private:
     );
 
     GLFWwindow* m_window;
+
+    size_t m_maxFramesInFlight;
+    size_t m_currentFrame;
+
     vk::Instance m_instance;
     vk::DebugUtilsMessengerEXT m_debugMessenger;
     vk::SurfaceKHR m_surface;
@@ -72,9 +76,9 @@ private:
     vk::PipelineLayout m_pipelineLayout;
     vk::Pipeline m_pipeline;
     vk::CommandPool m_commandPool;
-    vk::CommandBuffer m_commandBuffer;
+    std::vector<vk::CommandBuffer> m_commandBuffer;
 
-    vk::Semaphore m_imageAvailable;
-    vk::Semaphore m_renderFinished;
-    vk::Fence m_inFlight;
+    std::vector<vk::Semaphore> m_imageAvailable;
+    std::vector<vk::Semaphore> m_renderFinished;
+    std::vector<vk::Fence> m_inFlight;
 };
