@@ -45,7 +45,11 @@ private:
     void recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex);
     void mainLoop();
     void drawFrame();
+    void cleanupSwapChain();
+    void recreateSwapChain();
     void cleanup();
+
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
     static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT vkMessageSeverity,
@@ -81,4 +85,6 @@ private:
     std::vector<vk::Semaphore> m_imageAvailable;
     std::vector<vk::Semaphore> m_renderFinished;
     std::vector<vk::Fence> m_inFlight;
+
+    bool m_frameBufferResized = false;
 };

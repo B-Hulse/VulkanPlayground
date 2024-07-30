@@ -150,9 +150,11 @@ void BasicTriangleApplication::initWindow()
     // Disables OpenGL context creation
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
     m_window = glfwCreateWindow(Width, Height, "Vulkan", nullptr, nullptr);
+    glfwSetWindowUserPointer(m_window, this);
+    glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 }
 
 void BasicTriangleApplication::initVulcan()
@@ -650,13 +652,27 @@ void BasicTriangleApplication::drawFrame()
 
     std::ignore = m_logicalDevice.waitForFences(inFlightFences, vk::True, UINT64_MAX);
 
-    m_logicalDevice.resetFences(inFlightFences);
+    unsigned int nextImage;
+    try
+    {
+        auto nextImageResult = m_logicalDevice.acquireNextImageKHR(m_swapChain, UINT64_MAX, currentImageAvailable);
+        if (nextImageResult.result != vk::Result::eSuccess && nextImageResult.result != vk::Result::eSuboptimalKHR)
+        {
+            throw std::runtime_error("failed to acquire swapchain image!");
+        }
+        nextImage = nextImageResult.value;
+    }
+    catch (vk::OutOfDateKHRError const&)
+    {
+        recreateSwapChain();
+        return;
+    }
 
-    auto imageIndex = m_logicalDevice.acquireNextImageKHR(m_swapChain, UINT64_MAX, currentImageAvailable);
+    m_logicalDevice.resetFences(inFlightFences);
 
     currentCommandBuffer.reset();
 
-    recordCommandBuffer(currentCommandBuffer, imageIndex.value);
+    recordCommandBuffer(currentCommandBuffer, nextImage);
 
     std::vector waitSemaphores = { currentImageAvailable};
     std::vector<vk::PipelineStageFlags> waitDstStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
@@ -675,7 +691,7 @@ void BasicTriangleApplication::drawFrame()
     m_gfxQueue.submit(submitInfos, currentInFlight);
 
     std::vector swapchains = { m_swapChain };
-    std::vector imageIndices = { imageIndex.value };
+    std::vector imageIndices = { nextImage };
 
     vk::PresentInfoKHR presentInfo {
         signalSemaphores,
@@ -683,9 +699,59 @@ void BasicTriangleApplication::drawFrame()
         imageIndices
     };
 
-    std::ignore = m_presentQueue.presentKHR(presentInfo);
+    try
+    {
+        auto presentResult = m_presentQueue.presentKHR(presentInfo);
+
+        if (presentResult == vk::Result::eSuboptimalKHR || m_frameBufferResized)
+        {
+            recreateSwapChain();
+            m_frameBufferResized = false;
+        }
+    }
+    catch (vk::OutOfDateKHRError const&)
+    {
+        recreateSwapChain();
+    }
 
     m_currentFrame = (m_currentFrame + 1) % m_maxFramesInFlight;
+}
+
+void BasicTriangleApplication::cleanupSwapChain()
+{
+    for (auto frameBuffer : m_swapChainFrameBuffers)
+    {
+        m_logicalDevice.destroyFramebuffer(frameBuffer);
+    }
+    m_swapChainFrameBuffers.clear();
+
+    for (auto const& imageView : m_swapChainImageViews)
+    {
+        m_logicalDevice.destroyImageView(imageView);
+    }
+    m_swapChainImageViews.clear();
+
+    m_logicalDevice.destroySwapchainKHR(m_swapChain);
+}
+
+void BasicTriangleApplication::recreateSwapChain()
+{
+    int width = 0, height = 0;
+    glfwGetFramebufferSize(m_window, &width, &height);
+
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(m_window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(m_logicalDevice);
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createFrameBuffers();
 }
 
 void BasicTriangleApplication::cleanup()
@@ -705,22 +771,13 @@ void BasicTriangleApplication::cleanup()
 
     m_logicalDevice.destroyCommandPool(m_commandPool);
 
-    for (auto frameBuffer : m_swapChainFrameBuffers)
-    {
-        m_logicalDevice.destroyFramebuffer(frameBuffer);
-    }
+    cleanupSwapChain();
 
     m_logicalDevice.destroyPipeline(m_pipeline);
 
     m_logicalDevice.destroyPipelineLayout(m_pipelineLayout);
+
     m_logicalDevice.destroyRenderPass(m_renderPass);
-
-    for (auto const& imageView : m_swapChainImageViews)
-    {
-        m_logicalDevice.destroyImageView(imageView);
-    }
-
-    m_logicalDevice.destroySwapchainKHR(m_swapChain);
 
     m_logicalDevice.destroy();
 
@@ -737,6 +794,13 @@ void BasicTriangleApplication::cleanup()
     m_window = nullptr;
 
     glfwTerminate();
+}
+
+void BasicTriangleApplication::framebufferResizeCallback(GLFWwindow* window, int width, int height)
+{
+    auto app = static_cast<BasicTriangleApplication*>(glfwGetWindowUserPointer(window));
+
+    app->m_frameBufferResized = true;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL BasicTriangleApplication::debugCallback(
