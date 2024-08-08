@@ -171,6 +171,7 @@ void BasicTriangleApplication::initVulcan()
     createFrameBuffers();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffer();
     createSyncObjects();
 }
@@ -568,32 +569,125 @@ void BasicTriangleApplication::createCommandPool()
 
 void BasicTriangleApplication::createVertexBuffer()
 {
+    vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
+    auto stagingBufferUsage = vk::BufferUsageFlagBits::eTransferSrc;
+    auto stagingMemoryUsage = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+
+    createBuffer(bufferSize, stagingBufferUsage, stagingMemoryUsage, stagingBuffer, stagingBufferMemory);
+
+    { // Scoping raw pointer
+        auto data = m_logicalDevice.mapMemory(stagingBufferMemory, 0, bufferSize);
+        memcpy(data, m_vertices.data(), bufferSize);
+        m_logicalDevice.unmapMemory(stagingBufferMemory);
+    }
+
+    auto vertexBufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer;
+    auto vertexMemoryUsage = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+    createBuffer(bufferSize, vertexBufferUsage, vertexMemoryUsage, m_vertexBuffer, m_vertexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_vertexBuffer, bufferSize);
+
+    m_logicalDevice.destroyBuffer(stagingBuffer);
+    m_logicalDevice.freeMemory(stagingBufferMemory);
+}
+
+void BasicTriangleApplication::createIndexBuffer()
+{
+    vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
+    auto stagingBufferUsage = vk::BufferUsageFlagBits::eTransferSrc;
+    auto stagingMemoryUsage = vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent;
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+
+    createBuffer(bufferSize, stagingBufferUsage, stagingMemoryUsage, stagingBuffer, stagingBufferMemory);
+
+    { // Scoping raw pointer
+        auto data = m_logicalDevice.mapMemory(stagingBufferMemory, 0, bufferSize);
+        memcpy(data, m_indices.data(), bufferSize);
+        m_logicalDevice.unmapMemory(stagingBufferMemory);
+    }
+
+    auto indexBufferUsage = vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer;
+    auto indexMemoryUsage = vk::MemoryPropertyFlagBits::eDeviceLocal;
+
+    createBuffer(bufferSize, indexBufferUsage, indexMemoryUsage, m_indexBuffer, m_indexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_indexBuffer, bufferSize);
+
+    m_logicalDevice.destroyBuffer(stagingBuffer);
+    m_logicalDevice.freeMemory(stagingBufferMemory);
+}
+
+void BasicTriangleApplication::createBuffer(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags properties,
+    vk::Buffer& buffer,
+    vk::DeviceMemory& bufferMemory
+) const
+{
     vk::BufferCreateInfo bufferInfo{
         {},
-        sizeof(m_vertices[0]) * m_vertices.size(),
-        vk::BufferUsageFlagBits::eVertexBuffer,
+        size,
+        usage,
         vk::SharingMode::eExclusive
     };
 
-    m_vertexBuffer = m_logicalDevice.createBuffer(bufferInfo);
+    buffer = m_logicalDevice.createBuffer(bufferInfo);
 
-    auto memoryRequirements = m_logicalDevice.getBufferMemoryRequirements(m_vertexBuffer);
-
-    auto const memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits, 
-                                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    auto memoryRequirements = m_logicalDevice.getBufferMemoryRequirements(buffer);
 
     vk::MemoryAllocateInfo allocInfo{
         memoryRequirements.size,
-        memoryTypeIndex
+        findMemoryType(memoryRequirements.memoryTypeBits, properties)
     };
 
-    m_vertexBufferMemory = m_logicalDevice.allocateMemory(allocInfo);
+    bufferMemory = m_logicalDevice.allocateMemory(allocInfo);
 
-    m_logicalDevice.bindBufferMemory(m_vertexBuffer, m_vertexBufferMemory, 0);
+    m_logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
+}
 
-    auto data = m_logicalDevice.mapMemory(m_vertexBufferMemory, 0, bufferInfo.size);
-    memcpy(data, m_vertices.data(), bufferInfo.size);
-    m_logicalDevice.unmapMemory(m_vertexBufferMemory);
+void BasicTriangleApplication::copyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const
+{
+    vk::CommandBufferAllocateInfo allocInfo{
+        m_commandPool,
+        vk::CommandBufferLevel::ePrimary,
+        1
+    };
+
+    auto copyBuffers = m_logicalDevice.allocateCommandBuffers(allocInfo);
+
+    auto& copyBuffer = copyBuffers.front();
+
+    vk::CommandBufferBeginInfo beginInfo{
+        vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+    };
+
+    copyBuffer.begin(beginInfo);
+
+    std::vector copyRegions {
+        vk::BufferCopy { 0, 0, size }
+    };
+
+    copyBuffer.copyBuffer(src, dst, copyRegions);
+
+    copyBuffer.end();
+
+    vk::SubmitInfo submitInfo {
+        {},
+        {},
+        copyBuffers
+    };
+
+    m_gfxQueue.submit(submitInfo);
+    m_gfxQueue.waitIdle();
+
+    m_logicalDevice.freeCommandBuffers(m_commandPool, copyBuffers);
 }
 
 uint32_t BasicTriangleApplication::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
@@ -682,7 +776,9 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
 
     buffer.bindVertexBuffers(0, vBuffers, vOffsets);
 
-    buffer.draw(static_cast<uint32_t>(m_vertices.size()), 1, 0, 0);
+    buffer.bindIndexBuffer(m_indexBuffer, 0, vk::IndexType::eUint16);
+
+    buffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
 
     buffer.endRenderPass();
 
@@ -829,6 +925,9 @@ void BasicTriangleApplication::cleanup()
     }
 
     m_logicalDevice.destroyCommandPool(m_commandPool);
+
+    m_logicalDevice.destroyBuffer(m_indexBuffer);
+    m_logicalDevice.freeMemory(m_indexBufferMemory);
 
     m_logicalDevice.destroyBuffer(m_vertexBuffer);
     m_logicalDevice.freeMemory(m_vertexBufferMemory);

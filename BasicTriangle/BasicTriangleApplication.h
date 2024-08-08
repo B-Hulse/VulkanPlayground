@@ -76,6 +76,10 @@ private:
     void createFrameBuffers();
     void createCommandPool();
     void createVertexBuffer();
+    void createIndexBuffer();
+    void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::
+                      DeviceMemory& bufferMemory) const;
+    void copyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void createCommandBuffer();
     void createSyncObjects();
@@ -120,6 +124,8 @@ private:
     std::vector<vk::CommandBuffer> m_commandBuffer;
     vk::Buffer m_vertexBuffer;
     vk::DeviceMemory m_vertexBufferMemory;
+    vk::Buffer m_indexBuffer;
+    vk::DeviceMemory m_indexBufferMemory;
 
     std::vector<vk::Semaphore> m_imageAvailable;
     std::vector<vk::Semaphore> m_renderFinished;
@@ -128,9 +134,14 @@ private:
     bool m_frameBufferResized = false;
 
     const std::vector<Vertex> m_vertices = {
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    };
+
+    const std::vector<uint16_t> m_indices = {
+        0, 1, 2, 2, 3, 0
     };
 
 };
