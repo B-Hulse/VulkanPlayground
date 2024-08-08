@@ -170,6 +170,7 @@ void BasicTriangleApplication::initVulcan()
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffer();
     createSyncObjects();
 }
@@ -384,7 +385,15 @@ void BasicTriangleApplication::createGraphicsPipeline()
     auto const vertShaderModule = CreateShaderModule(m_logicalDevice, "shaders/shader.vert.spv");
     auto const fragShaderModule = CreateShaderModule(m_logicalDevice, "shaders/shader.frag.spv");
 
-    constexpr vk::PipelineVertexInputStateCreateInfo vertexInputState{};
+    std::array vertexBindingDescriptions = { Vertex::getBindingDescription() };
+    std::array vertexAttributeDescriptions = { Vertex::getAttributeDescriptions() };
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputState
+    {
+        {},
+        vertexBindingDescriptions,
+        vertexAttributeDescriptions
+    };
 
     std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = {
         { {}, vk::ShaderStageFlagBits::eVertex, vertShaderModule, "main" },
@@ -557,6 +566,51 @@ void BasicTriangleApplication::createCommandPool()
     m_commandPool = m_logicalDevice.createCommandPool(poolInfo);
 }
 
+void BasicTriangleApplication::createVertexBuffer()
+{
+    vk::BufferCreateInfo bufferInfo{
+        {},
+        sizeof(m_vertices[0]) * m_vertices.size(),
+        vk::BufferUsageFlagBits::eVertexBuffer,
+        vk::SharingMode::eExclusive
+    };
+
+    m_vertexBuffer = m_logicalDevice.createBuffer(bufferInfo);
+
+    auto memoryRequirements = m_logicalDevice.getBufferMemoryRequirements(m_vertexBuffer);
+
+    auto const memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits, 
+                                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    vk::MemoryAllocateInfo allocInfo{
+        memoryRequirements.size,
+        memoryTypeIndex
+    };
+
+    m_vertexBufferMemory = m_logicalDevice.allocateMemory(allocInfo);
+
+    m_logicalDevice.bindBufferMemory(m_vertexBuffer, m_vertexBufferMemory, 0);
+
+    auto data = m_logicalDevice.mapMemory(m_vertexBufferMemory, 0, bufferInfo.size);
+    memcpy(data, m_vertices.data(), bufferInfo.size);
+    m_logicalDevice.unmapMemory(m_vertexBufferMemory);
+}
+
+uint32_t BasicTriangleApplication::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
+{
+    auto memoryProperties = m_physicalDevice.GetPDevice().getMemoryProperties();
+
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
+    {
+        if (typeFilter & 1 << i && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
 void BasicTriangleApplication::createCommandBuffer()
 {
     vk::CommandBufferAllocateInfo bufferAllocInfo{
@@ -623,7 +677,12 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
 
     buffer.setScissor(0, scissors);
 
-    buffer.draw(3, 1, 0, 0);
+    std::vector vBuffers = { m_vertexBuffer };
+    std::vector<vk::DeviceSize> vOffsets = { 0 };
+
+    buffer.bindVertexBuffers(0, vBuffers, vOffsets);
+
+    buffer.draw(static_cast<uint32_t>(m_vertices.size()), 1, 0, 0);
 
     buffer.endRenderPass();
 
@@ -674,10 +733,10 @@ void BasicTriangleApplication::drawFrame()
 
     recordCommandBuffer(currentCommandBuffer, nextImage);
 
-    std::vector waitSemaphores = { currentImageAvailable};
+    std::vector waitSemaphores = { currentImageAvailable };
     std::vector<vk::PipelineStageFlags> waitDstStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-    std::vector commandBuffers = { currentCommandBuffer};
-    std::vector signalSemaphores = { currentRenderFinished};
+    std::vector commandBuffers = { currentCommandBuffer };
+    std::vector signalSemaphores = { currentRenderFinished };
 
     std::vector submitInfos{
         vk::SubmitInfo {
@@ -693,7 +752,7 @@ void BasicTriangleApplication::drawFrame()
     std::vector swapchains = { m_swapChain };
     std::vector imageIndices = { nextImage };
 
-    vk::PresentInfoKHR presentInfo {
+    vk::PresentInfoKHR presentInfo{
         signalSemaphores,
         swapchains,
         imageIndices
@@ -770,6 +829,9 @@ void BasicTriangleApplication::cleanup()
     }
 
     m_logicalDevice.destroyCommandPool(m_commandPool);
+
+    m_logicalDevice.destroyBuffer(m_vertexBuffer);
+    m_logicalDevice.freeMemory(m_vertexBufferMemory);
 
     cleanupSwapChain();
 

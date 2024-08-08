@@ -18,6 +18,41 @@ constexpr bool EnableValidationLayers = false;
 constexpr bool EnableValidationLayers = true;
 #endif
 
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        return {
+            0,
+            sizeof(Vertex),
+            vk::VertexInputRate::eVertex
+        };
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
+
+        return  {
+            vk::VertexInputAttributeDescription {
+                0,
+                0,
+                vk::Format::eR32G32Sfloat,
+                offsetof(Vertex, position)
+            },
+            vk::VertexInputAttributeDescription {
+                1,
+                0,
+                vk::Format::eR32G32B32Sfloat,
+                offsetof(Vertex, color)
+            }
+        };
+    }
+};
+
 class BasicTriangleApplication
 {
 public:
@@ -40,6 +75,8 @@ private:
     void createRenderPass();
     void createFrameBuffers();
     void createCommandPool();
+    void createVertexBuffer();
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void createCommandBuffer();
     void createSyncObjects();
     void recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex);
@@ -81,10 +118,19 @@ private:
     vk::Pipeline m_pipeline;
     vk::CommandPool m_commandPool;
     std::vector<vk::CommandBuffer> m_commandBuffer;
+    vk::Buffer m_vertexBuffer;
+    vk::DeviceMemory m_vertexBufferMemory;
 
     std::vector<vk::Semaphore> m_imageAvailable;
     std::vector<vk::Semaphore> m_renderFinished;
     std::vector<vk::Fence> m_inFlight;
 
     bool m_frameBufferResized = false;
+
+    const std::vector<Vertex> m_vertices = {
+        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    };
+
 };

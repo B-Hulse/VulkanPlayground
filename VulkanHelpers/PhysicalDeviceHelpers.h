@@ -40,7 +40,6 @@ private:
     QueueFamilyIndices getQueueFamilyIndices(vk::SurfaceKHR const& surface) const;
     SwapChainSupport getSwapChainSupport(vk::SurfaceKHR const& surface) const;
 
-
     vk::PhysicalDevice m_physicalDevice;
     std::unordered_map<VkSurfaceKHR, PDeviceToSurfaceProps> m_surfaceMap;
 };
