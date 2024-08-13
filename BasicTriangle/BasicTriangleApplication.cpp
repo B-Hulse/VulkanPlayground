@@ -167,11 +167,15 @@ void BasicTriangleApplication::initVulcan()
     createSwapChain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffer();
     createSyncObjects();
 }
@@ -191,7 +195,7 @@ void BasicTriangleApplication::createInstance()
     }
 
     std::vector<const char*> validationLayers;
-    const void* pNext;
+    const void* pNext = nullptr;
     auto const debugMessageCreateInfo = GetDebugMessengerCreateInfo(&debugCallback);
 
     if (EnableValidationLayers)
@@ -205,7 +209,7 @@ void BasicTriangleApplication::createInstance()
         vk::makeApiVersion(0, 1, 0, 0),
         "No Engine",
         vk::makeApiVersion(0, 1, 0, 0),
-        vk::ApiVersion13
+        vk::ApiVersion10
     );
 
     vk::InstanceCreateInfo const instanceCreateInfo(
@@ -381,6 +385,27 @@ void BasicTriangleApplication::createImageViews()
     std::ranges::transform(m_swapChainImages, std::back_inserter(m_swapChainImageViews), fnGetImageView);
 }
 
+void BasicTriangleApplication::createDescriptorSetLayout()
+{
+    std::vector bindings = {
+        vk::DescriptorSetLayoutBinding
+        {
+            0,
+            vk::DescriptorType::eUniformBuffer,
+            1,
+            vk::ShaderStageFlagBits::eVertex
+        }
+    };
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo
+    {
+        {},
+        bindings
+    };
+
+    m_descriptorSetLayout = m_logicalDevice.createDescriptorSetLayout(layoutInfo);
+}
+
 void BasicTriangleApplication::createGraphicsPipeline()
 {
     auto const vertShaderModule = CreateShaderModule(m_logicalDevice, "shaders/shader.vert.spv");
@@ -422,7 +447,7 @@ void BasicTriangleApplication::createGraphicsPipeline()
         false,
         vk::PolygonMode::eFill,
         vk::CullModeFlagBits::eBack,
-        vk::FrontFace::eClockwise,
+        vk::FrontFace::eCounterClockwise,
         false,
         0.0f,
         0.0f,
@@ -452,7 +477,15 @@ void BasicTriangleApplication::createGraphicsPipeline()
         colorBlendAttachments
     };
 
-    m_pipelineLayout = m_logicalDevice.createPipelineLayout({});
+    std::vector layouts = { m_descriptorSetLayout };
+
+    vk::PipelineLayoutCreateInfo pipelineLayout
+    {
+        {},
+        layouts
+    };
+
+    m_pipelineLayout = m_logicalDevice.createPipelineLayout(pipelineLayout);
 
     vk::GraphicsPipelineCreateInfo const pipelineCreateInfo{
         {},
@@ -623,6 +656,84 @@ void BasicTriangleApplication::createIndexBuffer()
     m_logicalDevice.freeMemory(stagingBufferMemory);
 }
 
+void BasicTriangleApplication::createUniformBuffers()
+{
+    vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    m_uniformBuffers.resize(m_maxFramesInFlight);
+    m_uniformBuffersMemory.resize(m_maxFramesInFlight);
+    m_uniformBuffersMapped.resize(m_maxFramesInFlight);
+
+    for (size_t i = 0; i < m_maxFramesInFlight; i++)
+    {
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, 
+                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, 
+                     m_uniformBuffers[i], 
+                     m_uniformBuffersMemory[i]);
+
+        m_uniformBuffersMapped[i] = m_logicalDevice.mapMemory(m_uniformBuffersMemory[i], 0, bufferSize);
+    }
+}
+
+void BasicTriangleApplication::createDescriptorPool()
+{
+    std::vector poolSizes = {
+        vk::DescriptorPoolSize
+        {
+            vk::DescriptorType::eUniformBuffer,
+            static_cast<uint32_t>(m_maxFramesInFlight)
+        }
+    };
+
+    vk::DescriptorPoolCreateInfo poolInfo
+    {
+        {},
+        static_cast<uint32_t>(m_maxFramesInFlight),
+        poolSizes
+    };
+
+    m_descriptorPool = m_logicalDevice.createDescriptorPool(poolInfo);
+}
+
+void BasicTriangleApplication::createDescriptorSets()
+{
+    std::vector descriptorSetLayouts(m_maxFramesInFlight, m_descriptorSetLayout);
+
+    vk::DescriptorSetAllocateInfo allocInfo
+    {
+        m_descriptorPool,
+        descriptorSetLayouts
+    };
+
+    m_descriptorSets = m_logicalDevice.allocateDescriptorSets(allocInfo);
+
+    for (size_t i = 0; i < m_maxFramesInFlight; i++)
+    {
+        std::vector bufferInfos = {
+            vk::DescriptorBufferInfo
+            {
+                m_uniformBuffers[i],
+                0,
+                sizeof(m_uniformBuffers[i])
+            }
+        };
+
+        std::vector descriptorWrites = {
+            vk::WriteDescriptorSet
+            {
+                m_descriptorSets[i],
+                0,
+                0,
+                vk::DescriptorType::eUniformBuffer,
+                {},
+                bufferInfos
+            }
+        };
+
+        m_logicalDevice.updateDescriptorSets(descriptorWrites,{});
+    }
+}
+
 void BasicTriangleApplication::createBuffer(
     vk::DeviceSize size,
     vk::BufferUsageFlags usage,
@@ -670,7 +781,7 @@ void BasicTriangleApplication::copyBuffer(vk::Buffer src, vk::Buffer dst, vk::De
 
     copyBuffer.begin(beginInfo);
 
-    std::vector copyRegions {
+    std::vector copyRegions{
         vk::BufferCopy { 0, 0, size }
     };
 
@@ -678,7 +789,7 @@ void BasicTriangleApplication::copyBuffer(vk::Buffer src, vk::Buffer dst, vk::De
 
     copyBuffer.end();
 
-    vk::SubmitInfo submitInfo {
+    vk::SubmitInfo submitInfo{
         {},
         {},
         copyBuffers
@@ -778,6 +889,10 @@ void BasicTriangleApplication::recordCommandBuffer(vk::CommandBuffer buffer, uin
 
     buffer.bindIndexBuffer(m_indexBuffer, 0, vk::IndexType::eUint16);
 
+    std::vector currentDescriptorSets = { m_descriptorSets[m_currentFrame] };
+
+    buffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipelineLayout, 0, currentDescriptorSets, {});
+
     buffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
 
     buffer.endRenderPass();
@@ -829,6 +944,8 @@ void BasicTriangleApplication::drawFrame()
 
     recordCommandBuffer(currentCommandBuffer, nextImage);
 
+    updateUniformBuffer(m_currentFrame);
+
     std::vector waitSemaphores = { currentImageAvailable };
     std::vector<vk::PipelineStageFlags> waitDstStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
     std::vector commandBuffers = { currentCommandBuffer };
@@ -870,6 +987,26 @@ void BasicTriangleApplication::drawFrame()
     }
 
     m_currentFrame = (m_currentFrame + 1) % m_maxFramesInFlight;
+}
+
+void BasicTriangleApplication::updateUniformBuffer(size_t currentFrame)
+{
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+
+    float time = std::chrono::duration<float>(currentTime - startTime).count();
+
+    UniformBufferObject ubo
+    {
+        .model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+        .view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
+        .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height), 0.1f, 10.0f)
+    };
+
+    ubo.proj[1][1] *= -1;
+
+    memcpy(m_uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 
 void BasicTriangleApplication::cleanupSwapChain()
@@ -933,6 +1070,17 @@ void BasicTriangleApplication::cleanup()
     m_logicalDevice.freeMemory(m_vertexBufferMemory);
 
     cleanupSwapChain();
+
+    for (size_t i = 0; i < m_maxFramesInFlight; i++)
+    {
+        m_logicalDevice.destroyBuffer(m_uniformBuffers[i]);
+        m_uniformBuffersMapped[i] = nullptr;
+        m_logicalDevice.freeMemory(m_uniformBuffersMemory[i]);
+    }
+
+    m_logicalDevice.destroyDescriptorPool(m_descriptorPool);
+
+    m_logicalDevice.destroyDescriptorSetLayout(m_descriptorSetLayout);
 
     m_logicalDevice.destroyPipeline(m_pipeline);
 

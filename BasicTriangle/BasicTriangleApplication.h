@@ -53,6 +53,13 @@ struct Vertex
     }
 };
 
+struct UniformBufferObject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
+};
+
 class BasicTriangleApplication
 {
 public:
@@ -71,12 +78,16 @@ private:
     void createLogicalDevice();
     void createSwapChain();
     void createImageViews();
+    void createDescriptorSetLayout();
     void createGraphicsPipeline();
     void createRenderPass();
     void createFrameBuffers();
     void createCommandPool();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
     void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::
                       DeviceMemory& bufferMemory) const;
     void copyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
@@ -86,6 +97,7 @@ private:
     void recordCommandBuffer(vk::CommandBuffer buffer, uint32_t imageIndex);
     void mainLoop();
     void drawFrame();
+    void updateUniformBuffer(size_t currentFrame);
     void cleanupSwapChain();
     void recreateSwapChain();
     void cleanup();
@@ -118,6 +130,7 @@ private:
     std::vector<vk::ImageView> m_swapChainImageViews;
     std::vector<vk::Framebuffer> m_swapChainFrameBuffers;
     vk::RenderPass m_renderPass;
+    vk::DescriptorSetLayout m_descriptorSetLayout;
     vk::PipelineLayout m_pipelineLayout;
     vk::Pipeline m_pipeline;
     vk::CommandPool m_commandPool;
@@ -126,6 +139,13 @@ private:
     vk::DeviceMemory m_vertexBufferMemory;
     vk::Buffer m_indexBuffer;
     vk::DeviceMemory m_indexBufferMemory;
+
+    std::vector<vk::Buffer> m_uniformBuffers;
+    std::vector<vk::DeviceMemory> m_uniformBuffersMemory;
+    std::vector<void*> m_uniformBuffersMapped;
+
+    vk::DescriptorPool m_descriptorPool;
+    std::vector<vk::DescriptorSet> m_descriptorSets;
 
     std::vector<vk::Semaphore> m_imageAvailable;
     std::vector<vk::Semaphore> m_renderFinished;
