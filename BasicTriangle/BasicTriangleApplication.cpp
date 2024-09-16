@@ -714,7 +714,7 @@ void BasicTriangleApplication::createDescriptorSets()
             {
                 m_uniformBuffers[i],
                 0,
-                sizeof(m_uniformBuffers[i])
+                sizeof(UniformBufferObject)
             }
         };
 
