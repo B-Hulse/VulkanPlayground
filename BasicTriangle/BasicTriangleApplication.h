@@ -76,7 +76,7 @@ private:
     void createSurface();
     void pickPhysicalDevice();
     void createLogicalDevice();
-    void createSwapChain();
+    void createSwapChain(bool recreate = false);
     void createImageViews();
     void createDescriptorSetLayout();
     void createGraphicsPipeline();

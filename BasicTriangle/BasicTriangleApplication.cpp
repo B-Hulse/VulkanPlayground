@@ -314,9 +314,9 @@ void BasicTriangleApplication::createLogicalDevice()
     m_presentQueue = m_logicalDevice.getQueue(*queueFamilyIndices.presentFamilyIndex, 0);
 }
 
-void BasicTriangleApplication::createSwapChain()
+void BasicTriangleApplication::createSwapChain(bool recreate /*= false*/)
 {
-    auto const swapChainSupport = m_physicalDevice.GetSwapChainSupport(m_surface);
+    auto const swapChainSupport = m_physicalDevice.GetSwapChainSupport(m_surface, recreate);
 
     auto const surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
     auto const presentMode = ChoosePresentMode(swapChainSupport.presentModes);
@@ -329,7 +329,7 @@ void BasicTriangleApplication::createSwapChain()
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
-    auto const indices = m_physicalDevice.GetQueueFamilyIndices(m_surface);
+    auto const indices = m_physicalDevice.GetQueueFamilyIndices(m_surface, recreate);
 
     std::set queueFamilyIndicesSet = { *indices.graphicsFamilyIndex, *indices.presentFamilyIndex };
     std::vector queueFamilyIndices(queueFamilyIndicesSet.begin(), queueFamilyIndicesSet.end());
@@ -977,12 +977,13 @@ void BasicTriangleApplication::drawFrame()
 
         if (presentResult == vk::Result::eSuboptimalKHR || m_frameBufferResized)
         {
-            recreateSwapChain();
             m_frameBufferResized = false;
+            recreateSwapChain();
         }
     }
     catch (vk::OutOfDateKHRError const&)
     {
+        m_frameBufferResized = false;
         recreateSwapChain();
     }
 
@@ -1001,7 +1002,7 @@ void BasicTriangleApplication::updateUniformBuffer(size_t currentFrame)
     {
         .model = rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
         .view = lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
-        .proj = glm::perspective(glm::radians(45.0f), static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height), 0.1f, 10.0f)
+        .proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / static_cast<float>(m_swapChainExtent.height), 0.1f, 10.0f)
     };
 
     ubo.proj[1][1] *= -1;
@@ -1041,7 +1042,7 @@ void BasicTriangleApplication::recreateSwapChain()
 
     cleanupSwapChain();
 
-    createSwapChain();
+    createSwapChain(true);
     createImageViews();
     createFrameBuffers();
 }

@@ -33,8 +33,8 @@ public:
     {}
 
     vk::PhysicalDevice GetPDevice() const;
-    QueueFamilyIndices GetQueueFamilyIndices(vk::SurfaceKHR const& surface);
-    SwapChainSupport GetSwapChainSupport(vk::SurfaceKHR const& surface);
+    QueueFamilyIndices GetQueueFamilyIndices(vk::SurfaceKHR const& surface, bool refresh = false);
+    SwapChainSupport GetSwapChainSupport(vk::SurfaceKHR const& surface, bool refresh = false);
 
 private:
     QueueFamilyIndices getQueueFamilyIndices(vk::SurfaceKHR const& surface) const;

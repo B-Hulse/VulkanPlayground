@@ -45,9 +45,9 @@ SwapChainSupport PhysicalDevice::getSwapChainSupport(vk::SurfaceKHR const& surfa
     };
 }
 
-QueueFamilyIndices PhysicalDevice::GetQueueFamilyIndices(vk::SurfaceKHR const& surface)
+QueueFamilyIndices PhysicalDevice::GetQueueFamilyIndices(vk::SurfaceKHR const& surface, bool refresh /*= false*/)
 {
-    if (auto const props = m_surfaceMap.find(surface); props != m_surfaceMap.end() && props->second.queueFamilyIndices)
+    if (auto const props = m_surfaceMap.find(surface); !refresh && props != m_surfaceMap.end() && props->second.queueFamilyIndices)
     {
         return *props->second.queueFamilyIndices;
     }
@@ -58,9 +58,9 @@ QueueFamilyIndices PhysicalDevice::GetQueueFamilyIndices(vk::SurfaceKHR const& s
     return queueFamilyIndices;
 }
 
-SwapChainSupport PhysicalDevice::GetSwapChainSupport(vk::SurfaceKHR const& surface)
+SwapChainSupport PhysicalDevice::GetSwapChainSupport(vk::SurfaceKHR const& surface, bool refresh /*= false*/)
 {
-    if (auto const props = m_surfaceMap.find(surface); props != m_surfaceMap.end() && props->second.swapChainSupport)
+    if (auto const props = m_surfaceMap.find(surface); !refresh && props != m_surfaceMap.end() && props->second.swapChainSupport)
     {
         return *props->second.swapChainSupport;
     }
