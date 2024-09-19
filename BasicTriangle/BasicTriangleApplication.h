@@ -83,6 +83,7 @@ private:
     void createRenderPass();
     void createFrameBuffers();
     void createCommandPool();
+    void createTextureImage();
     void createVertexBuffer();
     void createIndexBuffer();
     void createUniformBuffers();
@@ -90,6 +91,8 @@ private:
     void createDescriptorSets();
     void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::
                       DeviceMemory& bufferMemory) const;
+    std::pair<vk::Image, vk::DeviceMemory> createTexture(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling,
+                                                         vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties);
     void copyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
     void createCommandBuffer();
@@ -139,6 +142,9 @@ private:
     vk::DeviceMemory m_vertexBufferMemory;
     vk::Buffer m_indexBuffer;
     vk::DeviceMemory m_indexBufferMemory;
+
+    vk::Image m_textureImage;
+    vk::DeviceMemory m_textureImageMemory;
 
     std::vector<vk::Buffer> m_uniformBuffers;
     std::vector<vk::DeviceMemory> m_uniformBuffersMemory;

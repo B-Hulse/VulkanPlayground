@@ -171,6 +171,7 @@ void BasicTriangleApplication::initVulcan()
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
+    createTextureImage();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -600,6 +601,61 @@ void BasicTriangleApplication::createCommandPool()
     m_commandPool = m_logicalDevice.createCommandPool(poolInfo);
 }
 
+void BasicTriangleApplication::createTextureImage()
+{
+    int texWidth, texHeight, texChannels;
+    auto texName = "textures/cat.png";
+    stbi_uc* pixels = stbi_load(texName, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+    vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels)
+    {
+        throw std::runtime_error(std::format("failed to load texture: {}", texName));
+    }
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+
+    createBuffer(imageSize,
+                 vk::BufferUsageFlagBits::eTransferSrc,
+                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                 stagingBuffer,
+                 stagingBufferMemory);
+
+    auto data = m_logicalDevice.mapMemory(stagingBufferMemory, 0, imageSize, {});
+    memcpy(data, pixels, imageSize);
+    m_logicalDevice.unmapMemory(stagingBufferMemory);
+    stbi_image_free(pixels);
+
+
+    vk::ImageCreateInfo imageInfo
+    {
+        {},
+        vk::ImageType::e2D,
+        vk::Format::eB8G8R8A8Srgb,
+        vk::Extent3D
+        {
+            static_cast<uint32_t>(texWidth),
+            static_cast<uint32_t>(texHeight),
+            1
+        },
+        1,
+        1,
+        vk::SampleCountFlagBits::e1,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::SharingMode::eExclusive
+    };
+
+    std::tie(m_textureImage, m_textureImageMemory) = createTexture(texWidth, 
+                                                         texHeight, 
+                                                         vk::Format::eB8G8R8A8Srgb, 
+                                                         vk::ImageTiling::eOptimal, 
+                                                         vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, 
+                                                         vk::MemoryPropertyFlagBits::eDeviceLocal);
+}
+
 void BasicTriangleApplication::createVertexBuffer()
 {
     vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
@@ -666,9 +722,9 @@ void BasicTriangleApplication::createUniformBuffers()
 
     for (size_t i = 0; i < m_maxFramesInFlight; i++)
     {
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, 
-                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, 
-                     m_uniformBuffers[i], 
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                     m_uniformBuffers[i],
                      m_uniformBuffersMemory[i]);
 
         m_uniformBuffersMapped[i] = m_logicalDevice.mapMemory(m_uniformBuffersMemory[i], 0, bufferSize);
@@ -698,7 +754,6 @@ void BasicTriangleApplication::createDescriptorPool()
 void BasicTriangleApplication::createDescriptorSets()
 {
     std::vector descriptorSetLayouts(m_maxFramesInFlight, m_descriptorSetLayout);
-
     vk::DescriptorSetAllocateInfo allocInfo
     {
         m_descriptorPool,
@@ -730,7 +785,7 @@ void BasicTriangleApplication::createDescriptorSets()
             }
         };
 
-        m_logicalDevice.updateDescriptorSets(descriptorWrites,{});
+        m_logicalDevice.updateDescriptorSets(descriptorWrites, {});
     }
 }
 
@@ -761,6 +816,50 @@ void BasicTriangleApplication::createBuffer(
     bufferMemory = m_logicalDevice.allocateMemory(allocInfo);
 
     m_logicalDevice.bindBufferMemory(buffer, bufferMemory, 0);
+}
+
+std::pair<vk::Image, vk::DeviceMemory> BasicTriangleApplication::createTexture(
+    uint32_t width,
+    uint32_t height,
+    vk::Format format,
+
+    vk::ImageTiling tiling,
+    vk::ImageUsageFlags usage,
+    vk::MemoryPropertyFlags properties
+)
+{
+    vk::ImageCreateInfo imageInfo
+    {
+        {},
+        vk::ImageType::e2D,
+        format,
+        vk::Extent3D
+        {
+            width,
+            height,
+            1
+        },
+        1,
+        1,
+        vk::SampleCountFlagBits::e1,
+        tiling,
+        usage,
+        vk::SharingMode::eExclusive
+    };
+
+    auto textureImage = m_logicalDevice.createImage(imageInfo);
+
+    auto memoryRequirements = m_logicalDevice.getImageMemoryRequirements(textureImage);
+
+    vk::MemoryAllocateInfo allocInfo
+    {
+        memoryRequirements.size,
+        findMemoryType(memoryRequirements.memoryTypeBits, properties)
+    };
+
+    auto textureImageMemory = m_logicalDevice.allocateMemory(allocInfo);
+
+    return std::make_pair(textureImage, textureImageMemory);
 }
 
 void BasicTriangleApplication::copyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const
